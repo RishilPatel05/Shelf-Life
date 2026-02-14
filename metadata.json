@@ -1,0 +1,7 @@
+{
+  "name": "Shelf Life",
+  "description": "An intelligent pantry and fridge manager that tracks expiration dates and uses AI to suggest recipes and analyze grocery receipts to reduce food waste.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
