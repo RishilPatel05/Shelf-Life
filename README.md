@@ -51,3 +51,40 @@ Shelf Life is an intelligent pantry and fridge manager designed to help users tr
    ```bash
    git clone https://github.com/yourusername/shelf-life.git
    cd shelf-life
+
+   Install dependencies
+code
+Bash
+npm install
+Configure Environment Variables
+Create a .env file in the root directory and add your Google Gemini API key:
+code
+Env
+API_KEY=your_google_gemini_api_key_here
+Run the Application
+code
+Bash
+npm run dev
+Open in Browser
+Visit http://localhost:5173 (or the port shown in your terminal).
+📂 Project Structure
+code
+Text
+/
+├── index.html              # Entry point
+├── index.tsx               # React Root
+├── App.tsx                 # Main Application Logic & UI
+├── types.ts                # TypeScript Interfaces
+├── metadata.json           # App metadata & permissions
+├── components/
+│   ├── Button.tsx          # Reusable Button component
+│   ├── FoodCard.tsx        # Item display card with expiry logic
+│   └── RecipeCard.tsx      # Recipe display with modal view
+└── services/
+    └── geminiService.ts    # AI integration & OCR logic
+🧠 How It Works
+Scanning: When an image is uploaded, geminiService.ts first attempts to send it to the external Python backend.
+Fallback: If the backend is unreachable, it sends the image directly to Google Gemini Flash with a specific prompt to extract JSON data.
+Processing: The app normalizes the data (categories, dates) and calculates expiration based on a hardcoded dictionary of standard shelf lives (STANDARD_SHELF_LIFE).
+Merging: The App.tsx logic checks for existing items and sums up quantities/prices if a match is found.
+Recipes: The "Smart Recipes" tab sends a list of your current inventory names to Gemini to generate cooking ideas.
