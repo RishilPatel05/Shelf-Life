@@ -7,6 +7,7 @@ export interface FoodItem {
   expiryDate: string;
   quantity: string;
   addedAt: string;
+  price?: number;
 }
 
 export interface Recipe {
@@ -24,4 +25,5 @@ export interface ScannedItem {
   quantity: string;
   category: Category;
   estimatedExpiryDays: number;
+  estimatedPrice?: number;
 }

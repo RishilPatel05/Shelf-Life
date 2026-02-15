@@ -5,6 +5,37 @@ import { Button } from './components/Button';
 import { FoodCard } from './components/FoodCard';
 import { RecipeCard } from './components/RecipeCard';
 
+// Helper to merge quantity strings (e.g., "1 unit" + "2 units" -> "3 units")
+const mergeQuantities = (qty1: string, qty2: string): string => {
+  const parse = (str: string) => {
+    // Matches "1.5 kg", "2 units", "10"
+    const match = str.trim().match(/^([\d.]+)\s*(.*)$/);
+    if (match) {
+      const val = parseFloat(match[1]);
+      if (isNaN(val)) return null;
+      // Normalize unit: lowercase, remove trailing 's'
+      const unit = match[2].trim().toLowerCase().replace(/s$/, '');
+      return { val, unit };
+    }
+    return null;
+  };
+
+  const p1 = parse(qty1);
+  const p2 = parse(qty2);
+
+  // If both are parseable and have same (or empty) unit
+  if (p1 && p2 && p1.unit === p2.unit) {
+    const total = p1.val + p2.val;
+    // Re-add 's' if plural and unit exists
+    const unitSuffix = (p1.unit && total !== 1) ? 's' : '';
+    const unit = p1.unit ? `${p1.unit}${unitSuffix}` : '';
+    return `${total} ${unit}`.trim();
+  }
+
+  // Fallback: distinct units or non-numeric, just concatenate nicely
+  return `${qty1} + ${qty2}`;
+};
+
 const App: React.FC = () => {
   const [items, setItems] = useState<FoodItem[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -22,6 +53,7 @@ const App: React.FC = () => {
   const [newItemCategory, setNewItemCategory] = useState<Category>('Fridge');
   const [newItemQuantity, setNewItemQuantity] = useState('1 unit');
   const [newItemExpiry, setNewItemExpiry] = useState('');
+  const [newItemPrice, setNewItemPrice] = useState(''); // New state for price
   const [isExpiryManuallySet, setIsExpiryManuallySet] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,9 +75,9 @@ const App: React.FC = () => {
       setItems(JSON.parse(saved));
     } else {
       const mockItems: FoodItem[] = [
-        { id: '1', name: 'Almond Milk', category: 'Fridge', expiryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], quantity: '1L', addedAt: new Date().toISOString() },
-        { id: '2', name: 'Fresh Spinach', category: 'Fridge', expiryDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], quantity: '200g', addedAt: new Date().toISOString() },
-        { id: '3', name: 'Basmati Rice', category: 'Pantry', expiryDate: new Date(Date.now() + 100 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], quantity: '2kg', addedAt: new Date().toISOString() },
+        { id: '1', name: 'Almond Milk', category: 'Fridge', expiryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], quantity: '1L', addedAt: new Date().toISOString(), price: 3.99 },
+        { id: '2', name: 'Fresh Spinach', category: 'Fridge', expiryDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], quantity: '200g', addedAt: new Date().toISOString(), price: 2.49 },
+        { id: '3', name: 'Basmati Rice', category: 'Pantry', expiryDate: new Date(Date.now() + 100 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], quantity: '2kg', addedAt: new Date().toISOString(), price: 8.50 },
       ];
       setItems(mockItems);
     }
@@ -55,15 +87,44 @@ const App: React.FC = () => {
     localStorage.setItem('shelf-life-items', JSON.stringify(items));
   }, [items]);
 
-  const addItem = (item: Omit<FoodItem, 'id' | 'addedAt'>) => {
-    const newItem: FoodItem = {
-      ...item,
-      id: Math.random().toString(36).substr(2, 9),
-      addedAt: new Date().toISOString()
-    };
-    setItems(prev => [newItem, ...prev]);
+  // Smart Add Function: Merges duplicates if name, category, and expiry match
+  const addFoodItems = (newItemsData: Omit<FoodItem, 'id' | 'addedAt'>[]) => {
+    setItems(prevItems => {
+      let updatedItems = [...prevItems];
+      const itemsToAdd: FoodItem[] = [];
+
+      newItemsData.forEach(newItem => {
+        // Find exact match
+        const existingIndex = updatedItems.findIndex(i => 
+          i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim() &&
+          i.category === newItem.category &&
+          i.expiryDate === newItem.expiryDate
+        );
+
+        if (existingIndex !== -1) {
+          // Merge with existing item
+          const existingItem = updatedItems[existingIndex];
+          updatedItems[existingIndex] = {
+            ...existingItem,
+            quantity: mergeQuantities(existingItem.quantity, newItem.quantity),
+            price: (existingItem.price || 0) + (newItem.price || 0),
+            addedAt: new Date().toISOString() // Update timestamp to reflect restocking
+          };
+        } else {
+          // Add as new item
+          itemsToAdd.push({
+            ...newItem,
+            id: Math.random().toString(36).substr(2, 9),
+            addedAt: new Date().toISOString()
+          });
+        }
+      });
+
+      return [...itemsToAdd, ...updatedItems];
+    });
     
-    if (activeCategory !== 'All' && activeCategory !== item.category) {
+    // Reset view filters to ensure user sees the update
+    if (activeCategory !== 'All' && newItemsData.some(i => i.category !== activeCategory)) {
       setActiveCategory('All');
     }
     if (filterType !== 'all') {
@@ -86,17 +147,19 @@ const App: React.FC = () => {
       finalExpiry = d.toISOString().split('T')[0];
     }
     
-    addItem({
+    addFoodItems([{
       name: newItemName.trim(),
       category: newItemCategory,
       quantity: newItemQuantity,
-      expiryDate: finalExpiry
-    });
+      expiryDate: finalExpiry,
+      price: parseFloat(newItemPrice) || 0
+    }]);
     
     // Reset state
     setNewItemName('');
     setNewItemQuantity('1 unit');
     setNewItemExpiry('');
+    setNewItemPrice('');
     setIsExpiryManuallySet(false);
     setIsAddModalOpen(false);
   };
@@ -122,15 +185,11 @@ const App: React.FC = () => {
             name: s.name,
             category: s.category,
             quantity: s.quantity,
-            expiryDate: new Date(Date.now() + s.estimatedExpiryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            expiryDate: new Date(Date.now() + s.estimatedExpiryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            price: s.estimatedPrice || 0
           }));
           
-          setItems(prev => [...newItems.map(ni => ({
-            ...ni,
-            id: Math.random().toString(36).substr(2, 9),
-            addedAt: new Date().toISOString()
-          })), ...prev]);
-          
+          addFoodItems(newItems);
           setView('inventory');
         } catch (error: any) {
           console.error(error);
@@ -157,7 +216,6 @@ const App: React.FC = () => {
       const results = await generateRecipes(items);
       setRecipes(results);
     } catch (error) {
-      // The service now handles fallback recipes, but if something catastrophic happens:
       alert('Could not load recipes at this time.');
     } finally {
       setIsGeneratingRecipes(false);
@@ -199,7 +257,11 @@ const App: React.FC = () => {
     today.setHours(0, 0, 0, 0);
     const total = items.length;
     const expiredCount = items.filter(i => new Date(i.expiryDate) < today).length;
-    // Calculate fresh percent, default to 100 if no items
+    
+    // Calculate values
+    const totalValue = items.reduce((sum, item) => sum + (item.price || 0), 0);
+    const wastedValue = items.filter(i => new Date(i.expiryDate) < today).reduce((sum, item) => sum + (item.price || 0), 0);
+    
     const freshPercent = total > 0 ? Math.round(((total - expiredCount) / total) * 100) : 100;
 
     return {
@@ -210,7 +272,9 @@ const App: React.FC = () => {
       }).length,
       expired: expiredCount,
       freshPercent,
-      fridge: items.filter(i => i.category === 'Fridge').length
+      fridge: items.filter(i => i.category === 'Fridge').length,
+      totalValue,
+      wastedValue
     };
   }, [items]);
 
@@ -310,18 +374,30 @@ const App: React.FC = () => {
             <p className="text-slate-500 text-xs font-bold uppercase tracking-wide">Expired Items</p>
           </div>
 
-          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-5 rounded-3xl shadow-xl shadow-emerald-200 text-white relative overflow-hidden hidden lg:block transition-all duration-300 hover:scale-[1.02] cursor-default">
-            <svg className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          {/* MONEY MANAGEMENT CARD (Replaces Waste Impact) */}
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-800 p-5 rounded-3xl shadow-xl shadow-emerald-200 text-white relative overflow-hidden hidden lg:block transition-all duration-300 hover:scale-[1.02] cursor-default group">
+            <svg className="absolute -right-6 -bottom-6 h-32 w-32 text-white/10 group-hover:scale-110 transition-transform duration-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <div className="relative z-10">
-              <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-1">Waste Impact</p>
-              <h3 className="text-2xl font-black mb-2 animate-in fade-in">{stats.freshPercent}% Fresh</h3>
-              <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="bg-white h-full rounded-full transition-all duration-1000 ease-out" 
-                  style={{ width: `${Math.max(stats.freshPercent, 5)}%` }}
-                ></div>
+            <div className="relative z-10 flex flex-col h-full justify-between">
+              <div>
+                <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mb-1 opacity-80">Kitchen Value</p>
+                <h3 className="text-3xl font-black tracking-tight animate-in fade-in">
+                  ${stats.totalValue.toFixed(2)}
+                </h3>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+                <div>
+                   <p className="text-[10px] font-bold uppercase text-emerald-200">Wasted Money</p>
+                   <p className="text-lg font-bold text-rose-300">-${stats.wastedValue.toFixed(2)}</p>
+                </div>
+                <div className="bg-white/20 p-2 rounded-lg">
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-100" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+                      <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd" />
+                   </svg>
+                </div>
               </div>
             </div>
           </div>
@@ -500,6 +576,7 @@ const App: React.FC = () => {
              setIsAddModalOpen(false);
              setNewItemName('');
              setIsExpiryManuallySet(false);
+             setNewItemPrice('');
           }}></div>
           <div className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             <form onSubmit={handleManualAdd}>
@@ -539,7 +616,23 @@ const App: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Expiry Date</label>
+                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Price / Cost</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        value={newItemPrice}
+                        onChange={(e) => setNewItemPrice(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-emerald-50 focus:border-emerald-500 outline-none transition-all text-slate-800"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Expiry Date</label>
                     <input 
                       type="date" 
                       value={newItemExpiry}
@@ -551,7 +644,6 @@ const App: React.FC = () => {
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-emerald-50 focus:border-emerald-500 outline-none transition-all text-slate-800"
                     />
                     <p className="text-[9px] text-slate-400 mt-1">Leave empty to use international standard</p>
-                  </div>
                 </div>
 
                 <div>
@@ -580,6 +672,7 @@ const App: React.FC = () => {
                     setIsAddModalOpen(false);
                     setNewItemName('');
                     setIsExpiryManuallySet(false);
+                    setNewItemPrice('');
                   }}
                 >
                   Cancel

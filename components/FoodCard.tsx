@@ -34,6 +34,8 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onDelete }) => {
     'Spice Rack': 'Spices'
   };
 
+  const formattedPrice = item.price !== undefined ? `$${item.price.toFixed(2)}` : '--';
+
   return (
     <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group relative">
       <div className="flex justify-between items-start mb-6">
@@ -61,9 +63,16 @@ export const FoodCard: React.FC<FoodCardProps> = ({ item, onDelete }) => {
       
       <div className="mt-8 pt-5 border-t border-slate-50 flex justify-between items-center">
         <div className="flex flex-col">
-          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1">Expires On</span>
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1">Value</span>
+          <span className="text-sm font-bold text-emerald-600">
+            {formattedPrice}
+          </span>
+        </div>
+        
+        <div className="flex flex-col items-end mr-auto ml-6">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1">Expires</span>
           <span className="text-sm font-bold text-slate-700">
-            {new Date(item.expiryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            {new Date(item.expiryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
           </span>
         </div>
         

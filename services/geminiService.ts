@@ -1,21 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { FoodItem, Recipe, ScannedItem, Category } from "../types";
 
-const API_KEY = process.env.API_KEY || '';
+// Helper to ensure we always use the latest key if it changes at runtime
+const getApiKey = () => process.env.API_KEY || '';
 
 // --- CONFIGURATION ---
 // The URL of the Python Backend (FastAPI)
-// If you run the backend locally, change this to 'http://127.0.0.1:8000'
 const BACKEND_URL = 'https://shelf-life-sfhacks.vercel.app';
 
 // --- FALLBACK MOCK DATA ---
 const MOCK_SCANNED_ITEMS: ScannedItem[] = [
-  { name: "Organic Bananas", quantity: "1 bunch", category: "Countertop", estimatedExpiryDays: 5 },
-  { name: "Avocados", quantity: "3 units", category: "Countertop", estimatedExpiryDays: 4 },
-  { name: "Sourdough Bread", quantity: "1 loaf", category: "Pantry", estimatedExpiryDays: 5 },
-  { name: "Cage-Free Eggs", quantity: "12 count", category: "Fridge", estimatedExpiryDays: 21 },
-  { name: "Almond Milk", quantity: "1 carton", category: "Fridge", estimatedExpiryDays: 7 },
-  { name: "Greek Yogurt", quantity: "2 cups", category: "Fridge", estimatedExpiryDays: 14 }
+  { name: "Organic Bananas", quantity: "1 bunch", category: "Countertop", estimatedExpiryDays: 5, estimatedPrice: 2.99 },
+  { name: "Avocados", quantity: "3 units", category: "Countertop", estimatedExpiryDays: 4, estimatedPrice: 4.50 },
+  { name: "Sourdough Bread", quantity: "1 loaf", category: "Pantry", estimatedExpiryDays: 5, estimatedPrice: 5.49 },
+  { name: "Cage-Free Eggs", quantity: "12 count", category: "Fridge", estimatedExpiryDays: 21, estimatedPrice: 6.99 },
+  { name: "Almond Milk", quantity: "1 carton", category: "Fridge", estimatedExpiryDays: 7, estimatedPrice: 3.99 },
+  { name: "Greek Yogurt", quantity: "2 cups", category: "Fridge", estimatedExpiryDays: 14, estimatedPrice: 1.50 }
 ];
 
 const MOCK_RECIPES: Recipe[] = [
@@ -131,6 +131,39 @@ const calculateDaysUntil = (dateStr: string | null | undefined, itemName?: strin
   }
 };
 
+/**
+ * Normalizes the category string from the API/Backend to match the app's internal Category type.
+ */
+const normalizeCategory = (inputCategory: string | undefined | null): Category => {
+  if (!inputCategory) return 'Fridge';
+  
+  const cat = inputCategory.toLowerCase().trim();
+  
+  // Freezers
+  if (cat.includes('freez') || cat.includes('ice') || cat.includes('frozen')) return 'Freezer';
+  
+  // Spice Rack
+  if (cat.includes('spice') || cat.includes('herb') || cat.includes('season') || cat.includes('salt') || cat.includes('pepper')) return 'Spice Rack';
+  
+  // Countertop
+  if (cat.includes('counter') || cat.includes('fruit') || cat.includes('banana') || cat.includes('bread') || cat.includes('avocado')) return 'Countertop';
+  
+  // Pantry
+  if (
+    cat.includes('pantry') || cat.includes('can') || cat.includes('dry') || 
+    cat.includes('box') || cat.includes('snack') || cat.includes('baking') || 
+    cat.includes('cereal') || cat.includes('rice') || cat.includes('pasta') || 
+    cat.includes('oil') || cat.includes('sugar') || cat.includes('flour')
+  ) return 'Pantry';
+  
+  // Cabinet (Dishes, non-food, or specific storage)
+  if (cat.includes('cabinet') || cat.includes('plate') || cat.includes('dish') || cat.includes('utensil')) return 'Cabinet';
+  
+  // Default to Fridge for most perishables (Produce, Dairy, Meat)
+  // Logic: if it's not any of the above specific ones, assume it needs cooling.
+  return 'Fridge'; 
+};
+
 export const analyzeReceiptOrGroceryImage = async (base64Image: string): Promise<ScannedItem[]> => {
   try {
     console.log(`Starting OCR analysis using backend at: ${BACKEND_URL}`);
@@ -172,18 +205,24 @@ export const analyzeReceiptOrGroceryImage = async (base64Image: string): Promise
     return itemsArray.map((item: any) => {
       const name = item.name || item.item || item.food_item || "Unidentified Item";
       const rawDate = item.expiration_date || item.expiry_date || item.expiry || item.expires_on;
+      const price = parseFloat(item.price || item.cost || item.unit_price) || 0;
+      
+      // Normalize category to ensure it fits into Fridge, Pantry, etc.
+      const category = normalizeCategory(item.category || item.type);
+
       return {
         name,
         quantity: item.quantity || item.qty || "1 unit",
-        category: (item.category as Category) || 'Fridge',
-        estimatedExpiryDays: calculateDaysUntil(rawDate, name)
+        category: category,
+        estimatedExpiryDays: calculateDaysUntil(rawDate, name),
+        estimatedPrice: price
       };
     });
 
   } catch (error: any) {
     // 2. Fallback: Google Gemini API (Direct)
     console.log("Attempting Direct Gemini Fallback...");
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     
     try {
       const fallbackResponse = await ai.models.generateContent({
@@ -191,7 +230,7 @@ export const analyzeReceiptOrGroceryImage = async (base64Image: string): Promise
         contents: {
           parts: [
             { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-            { text: "Extract food items from this receipt. Return JSON array: [{name, quantity, category, estimatedExpiryDays}]." }
+            { text: "Extract food items from this receipt. Return JSON array: [{name, quantity, category (must be exactly one of: Fridge, Pantry, Freezer, Cabinet, Countertop, Spice Rack), estimatedExpiryDays, estimatedPrice (number, default 0 if unknown)}]." }
           ]
         },
         config: { responseMimeType: "application/json", temperature: 0.1 }
@@ -210,7 +249,7 @@ export const analyzeReceiptOrGroceryImage = async (base64Image: string): Promise
 };
 
 export const generateRecipes = async (items: FoodItem[]): Promise<Recipe[]> => {
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const itemNames = items.map(i => `${i.name}`).join(", ");
   
   try {
