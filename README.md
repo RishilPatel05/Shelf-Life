@@ -81,18 +81,3 @@ Visit http://localhost:5173 (or the port shown in your terminal).
 │   └── RecipeCard.tsx      # Recipe display with modal view
 └── services/
     └── geminiService.ts    # AI integration & OCR logic
-🧠 How It Works
-Scanning
-When an image is uploaded, services/geminiService.ts first attempts to send it to the external Python backend.
-
-Fallback
-If the backend is unreachable, the app sends the image directly to Google Gemini Flash with a structured prompt to extract JSON data.
-
-Processing
-The app normalizes extracted data (categories, dates) and calculates expiration based on a hardcoded dictionary of standard shelf lives (STANDARD_SHELF_LIFE).
-
-Merging
-In App.tsx, the merge logic checks for existing items and sums quantities/prices when an item match is found.
-
-Recipes
-The Smart Recipes tab sends your current inventory item names to Gemini to generate cooking ideas.
