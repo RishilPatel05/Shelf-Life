@@ -205,7 +205,10 @@ export const analyzeReceiptOrGroceryImage = async (base64Image: string): Promise
     return itemsArray.map((item: any) => {
       const name = item.name || item.item || item.food_item || "Unidentified Item";
       const rawDate = item.expiration_date || item.expiry_date || item.expiry || item.expires_on;
-      const price = parseFloat(item.price || item.cost || item.unit_price) || 0;
+      
+      // Improve price extraction: prefer total_price, then price, then cost
+      // Ensure we don't accidentally pick up unit_price if total_price is available
+      const price = parseFloat(item.total_price || item.total || item.price || item.cost || item.estimatedPrice || 0);
       
       // Normalize category to ensure it fits into Fridge, Pantry, etc.
       const category = normalizeCategory(item.category || item.type);
@@ -230,7 +233,15 @@ export const analyzeReceiptOrGroceryImage = async (base64Image: string): Promise
         contents: {
           parts: [
             { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-            { text: "Extract food items from this receipt. Return JSON array: [{name, quantity, category (must be exactly one of: Fridge, Pantry, Freezer, Cabinet, Countertop, Spice Rack), estimatedExpiryDays, estimatedPrice (number, default 0 if unknown)}]." }
+            { text: `Extract food items from this receipt. 
+            Return a JSON array with these exact fields:
+            - name (string)
+            - quantity (string, e.g. "1 unit", "10 count")
+            - category (string, exactly one of: Fridge, Pantry, Freezer, Cabinet, Countertop, Spice Rack)
+            - estimatedExpiryDays (number)
+            - estimatedPrice (number, ONLY use the final total price for the line item. Do NOT use the unit price. Example: if line says "2 @ $0.89 $1.78", use 1.78).
+            
+            Ignore non-food items like "Tax", "Total", "Subtotal", "Card", "Auth", "Change".` }
           ]
         },
         config: { responseMimeType: "application/json", temperature: 0.1 }
@@ -255,10 +266,30 @@ export const generateRecipes = async (items: FoodItem[]): Promise<Recipe[]> => {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Suggest 3 recipes for: ${itemNames}. JSON format: [{title, ingredients[], instructions[], estimatedTime, difficulty, youtubeUrl}]`,
+      contents: `Suggest 3 recipes for: ${itemNames}. 
+      Return a JSON array with these exact fields:
+      - title (string)
+      - ingredients (array of strings)
+      - instructions (array of strings)
+      - estimatedTime (string)
+      - difficulty (string)
+      - youtubeSearchQuery (string: a concise search query to find a video tutorial for this specific recipe, e.g. "how to make creamy mushroom pasta")`,
       config: { responseMimeType: "application/json" }
     });
-    return JSON.parse(response.text || "[]");
+    
+    const rawRecipes = JSON.parse(response.text || "[]");
+    
+    // Transform to ensure valid YouTube Search URLs
+    return rawRecipes.map((r: any) => ({
+      title: r.title,
+      ingredients: r.ingredients,
+      instructions: r.instructions,
+      estimatedTime: r.estimatedTime,
+      difficulty: r.difficulty,
+      // Fallback to a constructed search URL using the title if the specific query is missing
+      youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(r.youtubeSearchQuery || r.title + " recipe tutorial")}`
+    }));
+
   } catch (error: any) {
     console.warn("Recipe Generation API unavailable. Using offline mock recipes.", error.message);
     return MOCK_RECIPES;
