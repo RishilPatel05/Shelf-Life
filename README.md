@@ -82,23 +82,19 @@ Visit http://localhost:5173 (or the port shown in your terminal).
 └── services/
     └── geminiService.ts    # AI integration & OCR logic
 
-🧠 How It Works
-Scanning
+## 🧠 How It Works
 
-When an image is uploaded, services/geminiService.ts first attempts to send it to the external Python backend.
+### 📤 Scanning
+When a receipt image is uploaded, `services/geminiService.ts` first attempts to process it through the external Python OCR backend for structured data extraction.
 
-Fallback
+### 🔁 Intelligent Fallback
+If the backend is unavailable or fails, the app seamlessly sends the image to **Google Gemini Flash** with a carefully engineered prompt to extract structured **JSON** data.
 
-If the backend is unreachable, the app sends the image directly to Google Gemini Flash with a structured prompt to extract JSON data.
+### ⚙️ Processing
+The extracted data is normalized (categories, dates, formatting), and expiration dates are calculated using a predefined `STANDARD_SHELF_LIFE` dictionary for common grocery items.
 
-Processing
+### 🔄 Smart Merging
+Inside `App.tsx`, the app checks for existing inventory matches and automatically merges items by summing quantities and prices to prevent duplicates.
 
-The app normalizes extracted data (categories, dates) and calculates expiration based on a hardcoded dictionary of standard shelf lives (STANDARD_SHELF_LIFE).
-
-Merging
-
-In App.tsx, the merge logic checks for existing items and sums quantities/prices when an item match is found.
-
-Recipes
-
-The Smart Recipes tab sends your current inventory item names to Gemini to generate cooking ideas.        
+### 🍳 Recipe Generation
+The **Smart Recipes** tab sends your current inventory item names to Gemini to generate personalized cooking ideas based on what you already have.
