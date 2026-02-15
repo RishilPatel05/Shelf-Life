@@ -67,7 +67,7 @@ API_KEY=your_google_gemini_api_key_here
 npm run dev
 4) Open in Browser
 Visit http://localhost:5173 (or the port shown in your terminal).
-```
+
 
 📂 Project Structure
 /
@@ -82,6 +82,7 @@ Visit http://localhost:5173 (or the port shown in your terminal).
 │   └── RecipeCard.tsx      # Recipe display with modal view
 └── services/
     └── geminiService.ts    # AI integration & OCR logic
+```
 
 ## 🧠 How It Works
 
