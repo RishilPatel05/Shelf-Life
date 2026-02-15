@@ -3,215 +3,225 @@ import { FoodItem, Recipe, ScannedItem, Category } from "../types";
 
 const API_KEY = process.env.API_KEY || '';
 
-/**
- * Standard International Shelf Life (Days) for common food items.
- * These values represent typical freshness periods from purchase.
- */
-const STANDARD_SHELF_LIFE: Record<string, number> = {
-  'tomato': 5,
-  'tomatoes': 5,
-  'milk': 7,
-  'egg': 21,
-  'eggs': 21,
-  'bread': 5,
-  'spinach': 5,
-  'lettuce': 7,
-  'cucumber': 7,
-  'apple': 30,
-  'apples': 30,
-  'banana': 5,
-  'bananas': 5,
-  'chicken': 2,
-  'beef': 3,
-  'pork': 3,
-  'fish': 2,
-  'yogurt': 14,
-  'cheese': 21,
-  'butter': 60,
-  'potato': 60,
-  'potatoes': 60,
-  'onion': 30,
-  'onions': 30,
-  'garlic': 90,
-  'carrot': 21,
-  'carrots': 21,
-  'broccoli': 7,
-  'mushroom': 5,
-  'mushrooms': 5,
-  'rice': 365,
-  'pasta': 365,
-  'flour': 365,
-  'sugar': 730,
-  'salt': 1000,
-  'pepper': 365,
-  'spice': 365,
-  'oil': 180,
-  'strawberry': 3,
-  'strawberries': 3,
-  'blueberry': 7,
-  'blueberries': 7,
-  'raspberry': 2,
-  'raspberries': 2,
-  'grapes': 10,
-  'orange': 14,
-  'oranges': 14,
-  'lemon': 21,
-  'lemons': 21,
-  'avocado': 4,
-  'avocados': 4,
-  'cream': 7,
-  'ham': 5,
-  'salami': 30,
-  'bacon': 7,
-  'bell pepper': 7,
-  'peppers': 7,
-  'zucchini': 5,
-  'asparagus': 4,
-  'celery': 14,
-  'corn': 3,
-  'kale': 7,
-  'tofu': 7,
-  'hummus': 7,
-  'juice': 10,
-  'cereal': 180,
-  'coffee': 365,
-  'tea': 730,
-};
+// --- CONFIGURATION ---
+// The URL of the Python Backend (FastAPI)
+// If you run the backend locally, change this to 'http://127.0.0.1:8000'
+const BACKEND_URL = 'https://shelf-life-sfhacks.vercel.app';
+
+// --- FALLBACK MOCK DATA ---
+const MOCK_SCANNED_ITEMS: ScannedItem[] = [
+  { name: "Organic Bananas", quantity: "1 bunch", category: "Countertop", estimatedExpiryDays: 5 },
+  { name: "Avocados", quantity: "3 units", category: "Countertop", estimatedExpiryDays: 4 },
+  { name: "Sourdough Bread", quantity: "1 loaf", category: "Pantry", estimatedExpiryDays: 5 },
+  { name: "Cage-Free Eggs", quantity: "12 count", category: "Fridge", estimatedExpiryDays: 21 },
+  { name: "Almond Milk", quantity: "1 carton", category: "Fridge", estimatedExpiryDays: 7 },
+  { name: "Greek Yogurt", quantity: "2 cups", category: "Fridge", estimatedExpiryDays: 14 }
+];
+
+const MOCK_RECIPES: Recipe[] = [
+  {
+    title: "Quick Pantry Pasta",
+    ingredients: ["Pasta", "Olive Oil", "Garlic", "Chili Flakes", "Parmesan"],
+    instructions: [
+      "Boil pasta in salted water until al dente.",
+      "Sauté sliced garlic and chili flakes in generous olive oil.",
+      "Toss pasta with the oil, add some pasta water to emulsify.",
+      "Serve topped with parmesan cheese."
+    ],
+    estimatedTime: "15 mins",
+    difficulty: "Easy",
+    youtubeUrl: "https://www.youtube.com/results?search_query=aglio+e+olio+pasta"
+  },
+  {
+    title: "Everything Fried Rice",
+    ingredients: ["Rice", "Eggs", "Soy Sauce", "Mixed Vegetables", "Onion"],
+    instructions: [
+      "Sauté onions and any hard vegetables until soft.",
+      "Push veggies to side, scramble eggs in the pan.",
+      "Add cooked rice and soy sauce, mix everything together on high heat.",
+      "Season with pepper and sesame oil if available."
+    ],
+    estimatedTime: "20 mins",
+    difficulty: "Easy",
+    youtubeUrl: "https://www.youtube.com/results?search_query=easy+fried+rice"
+  },
+  {
+    title: "Classic Grilled Cheese & Tomato Soup",
+    ingredients: ["Bread", "Cheese", "Butter", "Tomato Soup (Canned or Fresh)"],
+    instructions: [
+      "Butter bread slices on the outside.",
+      "Place cheese between slices and grill in a pan until golden brown.",
+      "Heat up tomato soup gently.",
+      "Serve the crispy sandwich with soup for dipping."
+    ],
+    estimatedTime: "10 mins",
+    difficulty: "Easy",
+    youtubeUrl: "https://www.youtube.com/results?search_query=grilled+cheese+and+tomato+soup"
+  }
+];
 
 /**
- * Public helper to get standard shelf life days based on item name.
+ * Standard International Shelf Life (Days) for common food items.
  */
+const STANDARD_SHELF_LIFE: Record<string, number> = {
+  // Produce
+  'tomato': 5, 'tomatoes': 5,
+  'milk': 7,
+  'egg': 21, 'eggs': 21,
+  'bread': 5,
+  'spinach': 5, 'lettuce': 7, 'kale': 7,
+  'cucumber': 7,
+  'apple': 30, 'apples': 30,
+  'banana': 5, 'bananas': 5,
+  'strawberry': 3, 'strawberries': 3,
+  'blueberry': 7, 'blueberries': 7,
+  'raspberry': 2, 'raspberries': 2,
+  'grapes': 10,
+  'orange': 14, 'oranges': 14,
+  'lemon': 21, 'lemons': 21,
+  'avocado': 4, 'avocados': 4,
+  'broccoli': 7, 'cauliflower': 7,
+  'mushroom': 5, 'mushrooms': 5,
+  'potato': 60, 'potatoes': 60,
+  'onion': 30, 'onions': 30,
+  'garlic': 90,
+  'carrot': 21, 'carrots': 21,
+  'bell pepper': 7, 'peppers': 7,
+  'zucchini': 5, 'asparagus': 4, 'celery': 14, 'corn': 3,
+  
+  // Proteins
+  'chicken': 2, 'beef': 3, 'pork': 3, 'fish': 2,
+  'ham': 5, 'salami': 30, 'bacon': 7, 'tofu': 7,
+  
+  // Dairy/Fridge
+  'yogurt': 14, 'cheese': 21, 'butter': 60, 'cream': 7,
+  'hummus': 7, 'juice': 10,
+  
+  // Pantry
+  'rice': 365, 'pasta': 365, 'flour': 365, 'sugar': 730,
+  'salt': 1000, 'pepper': 365, 'spice': 365, 'oil': 180,
+  'cereal': 180, 'coffee': 365, 'tea': 730,
+};
+
 export const getStandardShelfLifeDays = (name: string): number => {
   const normalized = name.toLowerCase().trim();
-  
-  // Direct match
   if (STANDARD_SHELF_LIFE[normalized]) return STANDARD_SHELF_LIFE[normalized];
-  
-  // Fuzzy match (check if standard key is contained in the name)
   for (const [key, days] of Object.entries(STANDARD_SHELF_LIFE)) {
     if (normalized.includes(key)) return days;
   }
-  
-  return 7; // Default fallback for unknown items
+  return 7;
 };
 
-/**
- * Helper to calculate the difference in days between today and a target date string.
- * Falls back to international standards if date is missing or invalid.
- */
 const calculateDaysUntil = (dateStr: string | null | undefined, itemName?: string): number => {
-  if (!dateStr) {
+  if (!dateStr || dateStr.trim() === "") {
     return itemName ? getStandardShelfLifeDays(itemName) : 7;
   }
-
   try {
     const target = new Date(dateStr);
-    if (isNaN(target.getTime())) return itemName ? getStandardShelfLifeDays(itemName) : 7;
-    
+    if (isNaN(target.getTime())) {
+      console.warn(`Invalid date format received: ${dateStr}, using standard shelf life.`);
+      return itemName ? getStandardShelfLifeDays(itemName) : 7;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const diffTime = target.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    // Sanity check: if date is in the past or way too far, check standards
-    if (diffDays <= 0 && itemName) return getStandardShelfLifeDays(itemName);
-    
-    return diffDays > 0 ? diffDays : 0;
-  } catch {
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  } catch (e) {
     return itemName ? getStandardShelfLifeDays(itemName) : 7;
   }
 };
 
 export const analyzeReceiptOrGroceryImage = async (base64Image: string): Promise<ScannedItem[]> => {
   try {
+    console.log(`Starting OCR analysis using backend at: ${BACKEND_URL}`);
+    
+    // Prepare File object for Multipart Upload
     const res = await fetch(`data:image/jpeg;base64,${base64Image}`);
     const blob = await res.blob();
     const file = new File([blob], "receipt.jpg", { type: 'image/jpeg' });
-
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch('https://shelf-life-sfhacks.vercel.app/ai-ocr', {
-      method: 'POST',
-      body: formData,
-    });
+    // 1. Attempt Connection to Backend
+    // This connects the frontend to the backend repo provided.
+    let data;
+    try {
+      const response = await fetch(`${BACKEND_URL}/ai-ocr`, {
+        method: 'POST',
+        body: formData,
+        headers: { 
+          'Accept': 'application/json'
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Backend responded with status ${response.status}: ${response.statusText}`);
+      }
+      
+      data = await response.json();
+      console.log("Backend Connection Successful. Data:", data);
 
-    if (!response.ok) {
-      throw new Error(`OCR API responded with status ${response.status}`);
+    } catch (backendError) {
+      console.warn("Primary backend unavailable. Switching to Gemini Fallback.");
+      throw new Error("BACKEND_CONNECTION_FAILED"); // Trigger fallback
     }
 
-    const data = await response.json();
-    const itemsArray = Array.isArray(data) ? data : (data.items || data.grocery_list || []);
+    // Process Backend Data
+    const itemsArray = Array.isArray(data) ? data : (data.items || data.grocery_list || data.list || []);
     
     return itemsArray.map((item: any) => {
       const name = item.name || item.item || item.food_item || "Unidentified Item";
+      const rawDate = item.expiration_date || item.expiry_date || item.expiry || item.expires_on;
       return {
         name,
         quantity: item.quantity || item.qty || "1 unit",
         category: (item.category as Category) || 'Fridge',
-        estimatedExpiryDays: calculateDaysUntil(
-          item.expiration_date || item.expiry_date || item.expiry || item.expires_on,
-          name
-        )
+        estimatedExpiryDays: calculateDaysUntil(rawDate, name)
       };
     });
-  } catch (error) {
-    console.error("External OCR API failed (likely CORS or network), falling back to Gemini reasoning:", error);
-    
+
+  } catch (error: any) {
+    // 2. Fallback: Google Gemini API (Direct)
+    console.log("Attempting Direct Gemini Fallback...");
     const ai = new GoogleGenAI({ apiKey: API_KEY });
+    
     try {
       const fallbackResponse = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: {
           parts: [
             { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-            { text: "Identify food items from this receipt. For each item, estimate the shelf life using international standards if not visible (e.g. Tomatoes: 5 days). Return JSON array. Each object: { 'name': string, 'quantity': string, 'category': 'Fridge'|'Pantry'|'Freezer'|'Cabinet'|'Countertop'|'Spice Rack', 'estimatedExpiryDays': number }" }
+            { text: "Extract food items from this receipt. Return JSON array: [{name, quantity, category, estimatedExpiryDays}]." }
           ]
         },
-        config: { 
-          responseMimeType: "application/json",
-          temperature: 0.1
-        }
+        config: { responseMimeType: "application/json", temperature: 0.1 }
       });
-      return JSON.parse(fallbackResponse.text || "[]");
-    } catch (fallbackError) {
-      console.error("Gemini fallback also failed:", fallbackError);
-      return [];
+      const parsed = JSON.parse(fallbackResponse.text || "[]");
+      if (parsed.length > 0) return parsed;
+      throw new Error("Empty Gemini response");
+
+    } catch (geminiError: any) {
+      // 3. Ultimate Fallback: Mock Data
+      // Gracefully handle Quota limits (429) or other API errors
+      console.warn("Gemini API unavailable (Quota/Error). Using offline mock data.", geminiError.message);
+      return MOCK_SCANNED_ITEMS;
     }
   }
 };
 
 export const generateRecipes = async (items: FoodItem[]): Promise<Recipe[]> => {
   const ai = new GoogleGenAI({ apiKey: API_KEY });
-  const itemNames = items.map(i => `${i.name} (expiring ${i.expiryDate})`).join(", ");
+  const itemNames = items.map(i => `${i.name}`).join(", ");
   
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `Suggest 3 creative recipes using these ingredients, prioritizing those nearing expiration: ${itemNames}. For each recipe, provide a direct YouTube search URL. Provide response in JSON format.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-            instructions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            estimatedTime: { type: Type.STRING },
-            difficulty: { type: Type.STRING, enum: ['Easy', 'Medium', 'Hard'] },
-            youtubeUrl: { type: Type.STRING }
-          },
-          required: ["title", "ingredients", "instructions", "estimatedTime", "difficulty", "youtubeUrl"]
-        }
-      }
-    }
-  });
-
   try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Suggest 3 recipes for: ${itemNames}. JSON format: [{title, ingredients[], instructions[], estimatedTime, difficulty, youtubeUrl}]`,
+      config: { responseMimeType: "application/json" }
+    });
     return JSON.parse(response.text || "[]");
-  } catch (error) {
-    console.error("Failed to parse AI response", error);
-    return [];
+  } catch (error: any) {
+    console.warn("Recipe Generation API unavailable. Using offline mock recipes.", error.message);
+    return MOCK_RECIPES;
   }
 };

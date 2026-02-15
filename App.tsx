@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'expiring' | 'expired'>('all');
+  const [sortBy, setSortBy] = useState<'expiry' | 'name' | 'added'>('expiry');
   
   // Quick Add Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -25,16 +26,7 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Default date initialization for modal
-  useEffect(() => {
-    if (isAddModalOpen && !newItemExpiry) {
-      const d = new Date();
-      d.setDate(d.getDate() + 7);
-      setNewItemExpiry(d.toISOString().split('T')[0]);
-    }
-  }, [isAddModalOpen, newItemExpiry]);
-
-  // Automatic International Standard Expiry Lookup
+  // Automatic International Standard Expiry Lookup for Manual Entry
   useEffect(() => {
     if (isAddModalOpen && newItemName && !isExpiryManuallySet) {
       const days = getStandardShelfLifeDays(newItemName);
@@ -84,15 +76,27 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!newItemName.trim()) return;
     
+    let finalExpiry = newItemExpiry;
+    
+    // If the user didn't want to add/touch the expiry date, calculate it automatically
+    if (!finalExpiry) {
+      const days = getStandardShelfLifeDays(newItemName);
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      finalExpiry = d.toISOString().split('T')[0];
+    }
+    
     addItem({
       name: newItemName.trim(),
       category: newItemCategory,
       quantity: newItemQuantity,
-      expiryDate: newItemExpiry
+      expiryDate: finalExpiry
     });
     
     // Reset state
     setNewItemName('');
+    setNewItemQuantity('1 unit');
+    setNewItemExpiry('');
     setIsExpiryManuallySet(false);
     setIsAddModalOpen(false);
   };
@@ -128,8 +132,13 @@ const App: React.FC = () => {
           })), ...prev]);
           
           setView('inventory');
-        } catch (error) {
-          alert('Failed to analyze image. Please try again.');
+        } catch (error: any) {
+          console.error(error);
+          let msg = 'Error analyzing image. Please try again.';
+          if (error.message.includes('Quota')) {
+            msg = 'AI Limit Reached: The scanning service is currently busy. Please try manual add for now.';
+          }
+          alert(msg);
           setView('inventory');
         } finally {
           setIsScanning(false);
@@ -148,18 +157,20 @@ const App: React.FC = () => {
       const results = await generateRecipes(items);
       setRecipes(results);
     } catch (error) {
-      alert('Failed to generate recipes.');
+      // The service now handles fallback recipes, but if something catastrophic happens:
+      alert('Could not load recipes at this time.');
     } finally {
       setIsGeneratingRecipes(false);
     }
   };
 
   const filteredItems = useMemo(() => {
-    return items.filter(i => {
+    const filtered = items.filter(i => {
       const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = activeCategory === 'All' || i.category === activeCategory;
       const expiry = new Date(i.expiryDate);
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
       const diff = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
       
       let matchesFilter = true;
@@ -168,17 +179,37 @@ const App: React.FC = () => {
 
       return matchesSearch && matchesCategory && matchesFilter;
     });
-  }, [items, searchQuery, activeCategory, filterType]);
+
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'expiry':
+          return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+        case 'added':
+          return new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime();
+        default:
+          return 0;
+      }
+    });
+  }, [items, searchQuery, activeCategory, filterType, sortBy]);
 
   const stats = useMemo(() => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const total = items.length;
+    const expiredCount = items.filter(i => new Date(i.expiryDate) < today).length;
+    // Calculate fresh percent, default to 100 if no items
+    const freshPercent = total > 0 ? Math.round(((total - expiredCount) / total) * 100) : 100;
+
     return {
-      total: items.length,
+      total,
       expiring: items.filter(i => {
         const diff = Math.ceil((new Date(i.expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         return diff <= 3 && diff >= 0;
       }).length,
-      expired: items.filter(i => new Date(i.expiryDate) < today).length,
+      expired: expiredCount,
+      freshPercent,
       fridge: items.filter(i => i.category === 'Fridge').length
     };
   }, [items]);
@@ -279,15 +310,18 @@ const App: React.FC = () => {
             <p className="text-slate-500 text-xs font-bold uppercase tracking-wide">Expired Items</p>
           </div>
 
-          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-5 rounded-3xl shadow-xl shadow-emerald-200 text-white relative overflow-hidden hidden lg:block">
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-5 rounded-3xl shadow-xl shadow-emerald-200 text-white relative overflow-hidden hidden lg:block transition-all duration-300 hover:scale-[1.02] cursor-default">
             <svg className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
             <div className="relative z-10">
               <p className="text-white/80 text-xs font-bold uppercase tracking-widest mb-1">Waste Impact</p>
-              <h3 className="text-2xl font-black mb-2">92% Fresh</h3>
-              <div className="w-full bg-white/20 h-1.5 rounded-full">
-                <div className="bg-white h-full rounded-full w-[92%]"></div>
+              <h3 className="text-2xl font-black mb-2 animate-in fade-in">{stats.freshPercent}% Fresh</h3>
+              <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-white h-full rounded-full transition-all duration-1000 ease-out" 
+                  style={{ width: `${Math.max(stats.freshPercent, 5)}%` }}
+                ></div>
               </div>
             </div>
           </div>
@@ -310,6 +344,24 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3 overflow-x-auto pb-4 md:pb-0 scrollbar-hide">
+                <div className="relative min-w-[140px]">
+                  <select 
+                    value={sortBy} 
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="w-full appearance-none pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:outline-none focus:ring-4 focus:ring-emerald-50 focus:border-emerald-500 cursor-pointer shadow-sm hover:border-emerald-200 transition-all"
+                  >
+                    <option value="expiry">Expiring Soon</option>
+                    <option value="added">Recently Added</option>
+                    <option value="name">Name (A-Z)</option>
+                  </select>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+
                 <div className="flex bg-slate-100/50 p-1 rounded-2xl border border-slate-200 whitespace-nowrap">
                   {allCategories.map(cat => (
                     <button
@@ -429,7 +481,7 @@ const App: React.FC = () => {
             </div>
             <div className="text-center">
               <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Processing Receipt</h2>
-              <p className="text-slate-500 font-medium max-w-sm">We're identifying your grocery items, matching quantities, and calculating estimated shelf life...</p>
+              <p className="text-slate-500 font-medium max-w-sm">We're identifying your grocery items, matching quantities, and calculating international shelf life...</p>
             </div>
             
             <div className="flex gap-2">
@@ -444,13 +496,17 @@ const App: React.FC = () => {
       {/* Manual Quick Add Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setIsAddModalOpen(false)}></div>
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => {
+             setIsAddModalOpen(false);
+             setNewItemName('');
+             setIsExpiryManuallySet(false);
+          }}></div>
           <div className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             <form onSubmit={handleManualAdd}>
               <div className="p-6 border-b border-slate-100 bg-emerald-50 flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-bold text-slate-900">Add Item Manually</h2>
-                  <p className="text-emerald-700 text-xs font-medium">Auto-calculates expiry based on product name</p>
+                  <p className="text-emerald-700 text-xs font-medium">Auto-calculates expiry based on global standards</p>
                 </div>
               </div>
               
@@ -491,8 +547,10 @@ const App: React.FC = () => {
                         setNewItemExpiry(e.target.value);
                         setIsExpiryManuallySet(true);
                       }}
+                      placeholder="Optional"
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-emerald-50 focus:border-emerald-500 outline-none transition-all text-slate-800"
                     />
+                    <p className="text-[9px] text-slate-400 mt-1">Leave empty to use international standard</p>
                   </div>
                 </div>
 
