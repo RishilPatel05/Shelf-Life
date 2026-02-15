@@ -48,28 +48,34 @@ Shelf Life is an intelligent pantry and fridge manager designed to help users tr
 ### Installation
 
 1. **Clone the repository**
-   ```bash
+   ```
    git clone https://github.com/yourusername/shelf-life.git
    cd shelf-life
+   ```
 
-   Install dependencies
-```
 ## 🚀 Getting Started
 
 ### 1) Install Dependencies
-bash
+```
 npm install
+```
 2) Configure Environment Variables
+
 Create a .env file in the root directory and add your Google Gemini API key:
-
+```
 API_KEY=your_google_gemini_api_key_here
+```
 3) Run the Application
+```
 npm run dev
+```
 4) Open in Browser
+ ```
 Visit http://localhost:5173 (or the port shown in your terminal).
-
+```
 
 📂 Project Structure
+```
 /
 ├── index.html              # Entry point
 ├── index.tsx               # React Root
