@@ -87,7 +87,11 @@ Visit http://localhost:5173 (or the port shown in your terminal).
 🧠 How It Works
 
 Scanning: When an image is uploaded, geminiService.ts first attempts to send it to the external Python backend.
+
 Fallback: If the backend is unreachable, it sends the image directly to Google Gemini Flash with a specific prompt to extract JSON data.
+
 Processing: The app normalizes the data (categories, dates) and calculates expiration based on a hardcoded dictionary of standard shelf lives (STANDARD_SHELF_LIFE).
+
 Merging: The App.tsx logic checks for existing items and sums up quantities/prices if a match is found.
+
 Recipes: The "Smart Recipes" tab sends a list of your current inventory names to Gemini to generate cooking ideas.
